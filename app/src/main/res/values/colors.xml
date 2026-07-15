@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MD3 seed color: refined indigo -->
+    <color name="seed">#3B5BA9</color>
+
+    <!-- Material 3 tonal palette -->
+    <color name="md_theme_primary">#B7C4FF</color>
+    <color name="md_theme_onPrimary">#002585</color>
+    <color name="md_theme_primaryContainer">#1E3D8F</color>
+    <color name="md_theme_onPrimaryContainer">#DBE1FF</color>
+    <color name="md_theme_secondary">#C3C5DD</color>
+    <color name="md_theme_onSecondary">#2C2F42</color>
+    <color name="md_theme_secondaryContainer">#424659</color>
+    <color name="md_theme_onSecondaryContainer">#E0E1F9</color>
+    <color name="md_theme_tertiary">#E4BAD9</color>
+    <color name="md_theme_onTertiary">#44263F</color>
+    <color name="md_theme_tertiaryContainer">#5C3C56</color>
+    <color name="md_theme_onTertiaryContainer">#FFD7F3</color>
+    <color name="md_theme_error">#FFB4AB</color>
+    <color name="md_theme_errorContainer">#93000A</color>
+    <color name="md_theme_onError">#690005</color>
+    <color name="md_theme_onErrorContainer">#FFDAD6</color>
+    <color name="md_theme_background">#1B1B1F</color>
+    <color name="md_theme_onBackground">#E4E2E6</color>
+    <color name="md_theme_surface">#1B1B1F</color>
+    <color name="md_theme_onSurface">#E4E2E6</color>
+    <color name="md_theme_surfaceVariant">#45464F</color>
+    <color name="md_theme_onSurfaceVariant">#C6C6D0</color>
+    <color name="md_theme_outline">#90909A</color>
+    <color name="md_theme_inverseOnSurface">#1B1B1F</color>
+    <color name="md_theme_inverseSurface">#E4E2E6</color>
+    <color name="md_theme_inversePrimary">#3B5BA9</color>
+    <color name="md_theme_shadow">#000000</color>
+    <color name="md_theme_surfaceTint">#B7C4FF</color>
+    <color name="md_theme_outlineVariant">#45464F</color>
+    <color name="md_theme_scrim">#000000</color>
+
+    <!-- Legacy compatibility aliases -->
+    <color name="colorPrimary">@color/md_theme_primary</color>
+    <color name="colorPrimaryDark">@color/md_theme_background</color>
+    <color name="colorAccent">@color/md_theme_tertiary</color>
+</resources>

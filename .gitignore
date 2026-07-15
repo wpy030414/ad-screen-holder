@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+build/
+app/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Signing
+release.keystore
+*.jks
+
+# Downloaded Gradle
+.gradle-dist/
+
+# Logs
+*.log
+
+# Release artifacts
+*.apk
+*.idsig
