@@ -7,13 +7,18 @@ import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 
@@ -40,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ImageView mImageView;
     private View mFallbackView;
+    private ImeInterceptorView mImeInterceptor;
     private Handler mHandler;
     private List<String> mImagePaths;
     private int mCurrentIndex;
@@ -123,6 +129,8 @@ public class MainActivity extends AppCompatActivity {
         mHandler = new Handler();
         mImagePaths = new ArrayList<>();
 
+        setupImeInterceptor();
+
         enterFullScreen();
         loadImageList();
     }
@@ -153,17 +161,75 @@ public class MainActivity extends AppCompatActivity {
         mHandler = null;
     }
 
+    // =========================================================================
+    // 键盘拦截与导航键屏蔽
+    // =========================================================================
+
+    /**
+     * 创建并添加不可见的 IME 拦截视图，用于接收虚拟键盘输入。
+     * 物理键盘仍走 {@link #dispatchKeyEvent} / {@link #onKeyDown} 路径。
+     */
+    private void setupImeInterceptor() {
+        // 禁止输入法窗口自动弹出
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+
+        mImeInterceptor = new ImeInterceptorView(this);
+        mImeInterceptor.setOnCharListener(new ImeInterceptorView.OnCharListener() {
+            @Override
+            public void onChar(char c) {
+                handleImeChar(c);
+            }
+        });
+
+        // 添加到根布局（1dp 不可见）
+        FrameLayout root = findViewById(android.R.id.content);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(1, 1);
+        root.addView(mImeInterceptor, lp);
+
+        // 获取焦点以接收 IME 输入，随即隐藏可能弹出的键盘
+        mImeInterceptor.requestFocus();
+        mImeInterceptor.post(new Runnable() {
+            @Override
+            public void run() {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(mImeInterceptor.getWindowToken(), 0);
+                }
+            }
+        });
+    }
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             enterFullScreen();
+            // 保持 IME 拦截器的焦点，同时确保键盘隐藏
+            if (mImeInterceptor != null && !mImeInterceptor.hasFocus()) {
+                mImeInterceptor.requestFocus();
+            }
         }
     }
 
-    // =========================================================================
-    // 键盘拦截与导航键屏蔽
-    // =========================================================================
+    /** 处理虚拟键盘来的字符，映射到对应操作 */
+    private void handleImeChar(char c) {
+        switch (c) {
+            case 'a':
+                Log.d(TAG, "IME 输入 A - 进入管理面板");
+                startActivity(new Intent(this, SettingsActivity.class));
+                break;
+            case 'q':
+                Log.d(TAG, "IME 输入 Q - 强制退出");
+                if (mHandler != null) {
+                    mHandler.removeCallbacksAndMessages(null);
+                }
+                android.os.Process.killProcess(android.os.Process.myPid());
+                finish();
+                break;
+            default:
+                break;
+        }
+    }
 
     @Override
     public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
@@ -176,10 +242,21 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (handleKey(event.getKeyCode())) {
+            int keyCode = event.getKeyCode();
+            // 1. 硬件键盘 keycode 优先
+            if (handleKey(keyCode)) return true;
+            // 2. IME sendKeyEvent 附带的字符
+            String chars = event.getCharacters();
+            if (chars != null && chars.length() > 0) {
+                handleImeChar(Character.toLowerCase(chars.charAt(0)));
                 return true;
             }
-            int keyCode = event.getKeyCode();
+            int unicode = event.getUnicodeChar();
+            if (unicode != 0) {
+                handleImeChar(Character.toLowerCase((char) unicode));
+                return true;
+            }
+            // 3. 屏蔽导航键
             if (keyCode == KeyEvent.KEYCODE_BACK
                     || keyCode == KeyEvent.KEYCODE_HOME
                     || keyCode == KeyEvent.KEYCODE_APP_SWITCH) {
@@ -217,15 +294,33 @@ public class MainActivity extends AppCompatActivity {
     // =========================================================================
 
     private void enterFullScreen() {
-        View decor = getWindow().getDecorView();
-        if (decor == null) return;
-        int flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
-        decor.setSystemUiVisibility(flags);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        WindowManager.LayoutParams attrs = getWindow().getAttributes();
+        // Android 11+ (API 30+) 使用 WindowInsetsController 可靠隐藏系统栏
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            // Android 5.0–10 (API 21–29) 使用传统 flags
+            View decor = getWindow().getDecorView();
+            if (decor != null) {
+                int flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+                decor.setSystemUiVisibility(flags);
+            }
+        }
+        // 保持屏幕常亮 + 锁屏状态下也能显示
+        attrs.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
+        getWindow().setAttributes(attrs);
     }
 
     // =========================================================================
