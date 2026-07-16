@@ -13,29 +13,45 @@
     <!-- SettingsActivity -->
     <string name="settings_title">管理面板</string>
 
-    <string name="power_schedule">自动开关机时间</string>
-    <string name="power_on">开机时间</string>
-    <string name="power_off">关机时间</string>
-    <string name="power_on_hint">选择开机时间</string>
-    <string name="power_off_hint">选择关机时间</string>
+    <string name="power_schedule">自动锁屏时间</string>
+    <string name="power_on">开屏时间</string>
+    <string name="power_off">闭屏时间</string>
+    <string name="power_on_hint">选择开屏时间</string>
+    <string name="power_off_hint">选择闭屏时间</string>
     <string name="power_time_format">%1$02d:%2$02d</string>
 
     <string name="ad_images">广告图片</string>
-    <string name="ad_images_empty">暂无图片，请点击“添加图片”</string>
-    <string name="ad_images_hint">勾选“展示”以在轮播中显示</string>
+    <string name="ad_images_empty">暂无图片，请点击"添加图片"</string>
+    <string name="ad_images_hint">勾选"展示"以在轮播中显示</string>
     <string name="image_checkbox_show">展示</string>
+    <string name="thumb_desc">图片缩略图</string>
+    <string name="btn_delete">删除</string>
+    <string name="toast_image_deleted">已删除 %1$d 张图片</string>
+    <string name="confirm_delete_image">确定删除 %1$s？</string>
+
+    <!-- 轮播设置 -->
+    <string name="slideshow_settings">轮播设置</string>
+    <string name="switch_interval">切换周期</string>
+    <string name="switch_interval_seconds">%1$d 秒</string>
+    <string name="switch_interval_hint">每张图片展示的时长</string>
 
     <string name="btn_add_images">添加图片</string>
     <string name="btn_save">保存设置</string>
     <string name="btn_return">返回轮播</string>
     <string name="btn_force_quit">强制退出</string>
 
-    <string name="toast_fill_times">请设置开机和关机时间</string>
+    <string name="toast_fill_times">请设置开屏和闭屏时间</string>
     <string name="toast_saved">设置已保存</string>
     <string name="toast_no_image_selected">请至少选择一张展示图片</string>
     <string name="toast_image_added">已添加 %1$d 张图片</string>
     <string name="toast_image_add_failed">添加图片失败</string>
     <string name="toast_permission_denied">缺少存储权限，无法添加图片</string>
+
+    <!-- 设备管理器 -->
+    <string name="device_admin_explanation">开启设备管理器后，应用可在设定的自动闭屏时间强制锁屏。仅用于定时熄屏，不会收集任何数据。</string>
+    <string name="toast_device_admin_enabled">设备管理器已激活，自动闭屏可用</string>
+    <string name="toast_device_admin_denied">未激活设备管理器，自动闭屏不会生效</string>
+    <string name="toast_device_admin_unavailable">当前设备不支持设备管理器</string>
 
     <!-- Accessibility -->
     <string name="desc_ad_image">广告图片</string>

@@ -2,6 +2,8 @@
 
 Android kiosk 广告屏轮播应用。全屏霸屏、键盘双路径输入、Material Design 3。
 
+**当前版本**：26.7.16+1710（versionCode 2607161）
+
 ## 技术栈
 
 - **语言**: Java 8
@@ -17,11 +19,11 @@ Android kiosk 广告屏轮播应用。全屏霸屏、键盘双路径输入、Mat
 ```
 MainActivity  ←──A键──→  SettingsActivity
      ↓                        ↓
-ImageCarousel            TimePicker + ImageManager
+ImageCarousel            TimePicker + ImageManager + SlideshowSettings
 (Handler+postDelayed)    (SharedPreferences)
      ↓                        ↓
 AutoPowerService ←────── 保存时启动
-(AlarmManager定时开关屏)
+(AlarmManager定时开屏/闭屏)
 ```
 
 ## 键盘输入双路径
@@ -56,15 +58,35 @@ AutoPowerService ←────── 保存时启动
 | 常量 | 值 | 位置 |
 |------|-----|------|
 | 图片目录 | `/sdcard/ads/` | `Utils.getAdsDir()` |
-| 轮播间隔 | 10s | `MainActivity.IMAGE_INTERVAL_SECONDS` |
-| 默认开机 | 08:00 | `SettingsActivity.DEFAULT_POWER_ON_TIME` |
-| 默认关机 | 22:00 | `SettingsActivity.DEFAULT_POWER_OFF_TIME` |
+| 默认轮播间隔 | 10s | `SettingsActivity.DEFAULT_IMAGE_INTERVAL` |
+| 轮播间隔范围 | 3–120s | `MIN_IMAGE_INTERVAL` / `MAX_IMAGE_INTERVAL` |
+| 缩略图采样尺寸 | 96px | `SettingsActivity.THUMB_SIZE` |
+| 缩略图缓存 | 256KB ARGB | `SettingsActivity.mThumbCache` |
+| 默认开屏 | 08:00 | `SettingsActivity.DEFAULT_POWER_ON_TIME` |
+| 默认闭屏 | 22:00 | `SettingsActivity.DEFAULT_POWER_OFF_TIME` |
 | Prefs key | `im.xrl.ad_screen_holder.prefs` | `SettingsActivity.PREFS_NAME` |
+
+## 图片管理
+
+- 导入时保留原始文件名（剥离扩展名后过滤非法字符 `\/:*?"<>|`）
+- 重名自动加 ` (1)` / ` (2)` 后缀（`uniquify()`）
+- 新导入图片默认加入"展示"列表
+- 列表项含缩略图（后台 2 线程池异步解码 + LRU 缓存）
+- 每行有删除按钮，确认后删文件 + 清理 `active_images` 残留
+
+## 自动锁屏（开屏/闭屏）
+
+- 开屏：`AlarmReceiver` 直接用 `PowerManager.SCREEN_BRIGHT_WAKEUP | ACQUIRE_CAUSES_WAKEUP` 亮屏
+- 闭屏：`DevicePolicyManager.lockNow()` 强制锁屏（需激活设备管理器）
+- 保存设置时若设备管理器未激活，会弹出系统对话框引导用户开启
+- `AlarmReceiver` 是 `AutoPowerService` 的静态内部类，已在 `AndroidManifest.xml` 用 `.AutoPowerService$AlarmReceiver` 注册
+- `PendingIntent` 在 API 23+ 加 `FLAG_IMMUTABLE`，兼容 Android 12+
 
 ## 构建命令
 
 ```bash
 export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
 export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.3/libexec/openjdk.jdk/Contents/Home
 ./build-and-sign.sh
 ```

@@ -3,6 +3,7 @@
 一款面向 Android 5.0+ 电子广告屏/信息发布场景的霸屏轮播应用。采用 Material Design 3 设计语言，全中文界面。
 
 包名：`im.xrl.ad_screen_holder`
+版本：26.7.16+1710（versionCode 2607161）
 
 ---
 
@@ -13,10 +14,12 @@
 | 全屏轮播 | `/sdcard/ads/` 目录下图片循环播放，带淡入淡出过渡 |
 | 防退出 | 拦截触摸、Back、Home、多任务键，kiosk 霸屏 |
 | 开机自启 | 监听 `BOOT_COMPLETED` 自动启动主界面与定时服务 |
-| 自动开关屏 | 闹钟定时亮屏/熄屏，默认 08:00 开机、22:00 熄屏 |
+| 自动开屏/闭屏 | 闹钟定时点亮/强制锁屏（默认 08:00 开屏、22:00 闭屏） |
 | 双路径键盘 | 物理键盘（USB/蓝牙/模拟器）走 KeyEvent；虚拟键盘（IME/软键盘）走 InputConnection 拦截 |
 | 沉浸全屏 | API 21-29 用 SYSTEM_UI_FLAG，API 30+ 用 WindowInsetsController，彻底隐藏状态栏与导航栏 |
-| MD3 界面 | 管理面板采用 Material Design 3 卡片 + 时间选择器 |
+| MD3 管理面板 | 缩略图、启用勾选、删除按钮、切换周期、原始文件名保留、设备管理器引导 |
+
+> ⚠️ "自动开关机"概念已明确为"强制锁屏"（`lockNow()`），熄屏后物理按键仍可重新亮屏。
 
 ---
 
@@ -44,9 +47,15 @@
 
 ## 管理面板
 
-1. **自动开关机时间**：点击"开机时间 / 关机时间"卡片，使用系统时间选择器设置。
-2. **广告图片**：点击"添加图片"从系统文件选择器导入图片；勾选"展示"以在轮播中显示。
-3. **保存 / 返回 / 强制退出**：底部三个操作按钮。
+1. **自动锁屏时间**：点击"开屏时间 / 闭屏时间"卡片，使用系统时间选择器设置。
+2. **轮播设置**：设置图片切换周期（3–120 秒，默认 10 秒）。
+3. **广告图片**：
+   - 点击"添加图片"从系统文件选择器导入图片
+   - 导入后保留原始文件名，新图片默认勾选"展示"
+   - 每行显示缩略图、文件名、"展示"勾选框、删除按钮
+   - 删除会弹出确认对话框，确认后删除文件并清理启用列表
+4. **保存 / 返回 / 强制退出**：底部三个操作按钮。
+5. 保存时若设备管理器未激活，会弹出系统对话框引导开启（用于自动闭屏）。
 
 ---
 
@@ -54,7 +63,8 @@
 
 1. 安装 APK 到设备。
 2. 首次启动会提示无图片，按 **A** 进入管理面板添加图片。
-3. 如需霸屏锁屏熄屏：
+3. 如需自动闭屏：
+   - 在管理面板点"保存设置"时按提示激活设备管理器，或
    - 进入系统 **设置 → 安全 → 设备管理器**，激活"电子广告屏"。
 4. 将本应用设为主屏幕/桌面启动器（可选，用于 kiosk 场景）。
 5. 重启设备验证开机自启。
@@ -65,10 +75,8 @@
 
 ```bash
 export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
 export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.3/libexec/openjdk.jdk/Contents/Home
-
-# 编译 release APK
-gradle assembleRelease
 
 # 一键签名
 ./build-and-sign.sh
@@ -88,9 +96,9 @@ gradle assembleRelease
 │   ├── AndroidManifest.xml
 │   ├── java/im/xrl/ad_screen_holder/
 │   │   ├── MainActivity.java             # 全屏轮播 + 键盘拦截 + 沉浸模式
-│   │   ├── SettingsActivity.java         # MD3 管理面板
+│   │   ├── SettingsActivity.java         # MD3 管理面板（图片/周期/锁屏）
 │   │   ├── ImeInterceptorView.java       # IME 虚拟键盘拦截视图
-│   │   ├── AutoPowerService.java         # 定时开关屏
+│   │   ├── AutoPowerService.java         # 定时开屏/闭屏（含 AlarmReceiver）
 │   │   ├── BootReceiver.java             # 开机自启
 │   │   ├── DeviceAdminReceiver.java      # 设备管理器
 │   │   └── Utils.java                    # 通用工具
@@ -104,7 +112,7 @@ gradle assembleRelease
 - Android 5.0 (API 21) 及以上
 - 需要存储权限以导入图片
 - 需要 `WAKE_LOCK` 权限以定时亮屏
-- 需要 Device Admin 权限以自动锁屏
+- 需要 Device Admin 权限以自动闭屏
 
 ---
 

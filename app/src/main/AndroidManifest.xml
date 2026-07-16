@@ -40,6 +40,12 @@
             android:enabled="true"
             android:exported="false" />
 
+        <!-- AlarmReceiver: receives scheduled power on/off alarms -->
+        <receiver
+            android:name=".AutoPowerService$AlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Device Admin Receiver: for kiosk mode lock-down -->
         <receiver
             android:name=".DeviceAdminReceiver"

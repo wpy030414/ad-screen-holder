@@ -2,16 +2,24 @@ package im.xrl.ad_screen_holder;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.app.TimePickerDialog;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.LruCache;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -20,6 +28,7 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.TimePicker;
@@ -33,7 +42,6 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.color.DynamicColors;
-import com.google.android.material.radiobutton.MaterialRadioButton;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,6 +52,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 管理面板：设置自动开关机时间、添加/选择广告图片。
@@ -57,13 +67,20 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_POWER_OFF_TIME = "power_off_time";
     private static final String KEY_ACTIVE_IMAGES = "active_images";
     private static final String KEY_IMAGE_ORDER = "image_order";
+    private static final String KEY_IMAGE_INTERVAL = "image_interval";
     private static final String DEFAULT_POWER_ON_TIME = "08:00";
     private static final String DEFAULT_POWER_OFF_TIME = "22:00";
+    private static final int DEFAULT_IMAGE_INTERVAL = 10;
+    private static final int MIN_IMAGE_INTERVAL = 3;
+    private static final int MAX_IMAGE_INTERVAL = 120;
+    private static final int THUMB_SIZE = 96;
     private static final int REQUEST_CODE_PICK_IMAGES = 1001;
     private static final int REQUEST_CODE_PERMISSION = 2001;
+    private static final int REQUEST_CODE_DEVICE_ADMIN = 3001;
 
     private SharedPreferences mPrefs;
     private ImeInterceptorView mImeInterceptor;
+    private ComponentName mAdminComponent;
     private TextView mPowerOnValue;
     private TextView mPowerOffValue;
     private int mPowerOnHour = 8;
@@ -71,10 +88,21 @@ public class SettingsActivity extends AppCompatActivity {
     private int mPowerOffHour = 22;
     private int mPowerOffMinute = 0;
     private LinearLayout mImageListContainer;
+    private TextView mIntervalValue;
+    private int mImageInterval = DEFAULT_IMAGE_INTERVAL;
 
-    private final List<MaterialRadioButton> mImageRadioButtons = new ArrayList<>();
     private final List<MaterialCheckBox> mImageCheckBoxes = new ArrayList<>();
+    private final List<ImageView> mImageThumbs = new ArrayList<>();
     private final List<String> mImageFileNames = new ArrayList<>();
+    private final LruCache<String, Bitmap> mThumbCache =
+            new LruCache<String, Bitmap>(256 * 1024 * 4) {
+                @Override
+                protected int sizeOf(String key, Bitmap value) {
+                    return value.getByteCount();
+                }
+            };
+    private final ExecutorService mThumbExecutor = Executors.newFixedThreadPool(2);
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,11 +111,19 @@ public class SettingsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_settings);
 
         mPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        mAdminComponent = new ComponentName(this, DeviceAdminReceiver.class);
         bindViews();
         loadSettings();
+        loadImageInterval();
         loadImageList();
         setupImeInterceptor();
         enterFullScreen();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mThumbExecutor.shutdownNow();
     }
 
     @Override
@@ -112,6 +148,7 @@ public class SettingsActivity extends AppCompatActivity {
         mPowerOnValue = findViewById(R.id.powerOnValue);
         mPowerOffValue = findViewById(R.id.powerOffValue);
         mImageListContainer = findViewById(R.id.imageListContainer);
+        mIntervalValue = findViewById(R.id.intervalValue);
 
         MaterialCardView powerOnCard = findViewById(R.id.powerOnCard);
         MaterialCardView powerOffCard = findViewById(R.id.powerOffCard);
@@ -123,6 +160,25 @@ public class SettingsActivity extends AppCompatActivity {
         powerOffCard.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { pickTime(false); }
+        });
+
+        findViewById(R.id.btnIntervalMinus).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mImageInterval > MIN_IMAGE_INTERVAL) {
+                    mImageInterval--;
+                    updateIntervalDisplay();
+                }
+            }
+        });
+        findViewById(R.id.btnIntervalPlus).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mImageInterval < MAX_IMAGE_INTERVAL) {
+                    mImageInterval++;
+                    updateIntervalDisplay();
+                }
+            }
         });
 
         findViewById(R.id.btnAddImages).setOnClickListener(new View.OnClickListener() {
@@ -151,6 +207,19 @@ public class SettingsActivity extends AppCompatActivity {
         mPowerOffHour = off[0];
         mPowerOffMinute = off[1];
         updateTimeDisplay();
+    }
+
+    private void loadImageInterval() {
+        mImageInterval = mPrefs.getInt(KEY_IMAGE_INTERVAL, DEFAULT_IMAGE_INTERVAL);
+        if (mImageInterval < MIN_IMAGE_INTERVAL) mImageInterval = MIN_IMAGE_INTERVAL;
+        if (mImageInterval > MAX_IMAGE_INTERVAL) mImageInterval = MAX_IMAGE_INTERVAL;
+        updateIntervalDisplay();
+    }
+
+    private void updateIntervalDisplay() {
+        if (mIntervalValue != null) {
+            mIntervalValue.setText(getString(R.string.switch_interval_seconds, mImageInterval));
+        }
     }
 
     private void updateTimeDisplay() {
@@ -239,6 +308,15 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_DEVICE_ADMIN) {
+            if (isDeviceAdminActive()) {
+                Toast.makeText(this, R.string.toast_device_admin_enabled, Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, R.string.toast_device_admin_denied, Toast.LENGTH_LONG).show();
+            }
+            finishSave();
+            return;
+        }
         if (requestCode == REQUEST_CODE_PICK_IMAGES && resultCode == RESULT_OK && data != null) {
             List<Uri> uris = new ArrayList<>();
             if (data.getClipData() != null) {
@@ -263,12 +341,15 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
 
-        int successCount = 0;
+        List<String> addedNames = new ArrayList<>();
         for (Uri uri : uris) {
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 if (in == null) continue;
                 String ext = Utils.getImageExtension(this, uri);
-                String name = System.currentTimeMillis() + "_" + successCount + ext;
+                String original = Utils.getFileName(this, uri);
+                String base = stripExt(original);
+                if (base.isEmpty()) base = "image";
+                String name = uniquify(adsDir, base, ext);
                 File outFile = new File(adsDir, name);
                 try (FileOutputStream out = new FileOutputStream(outFile)) {
                     byte[] buf = new byte[8192];
@@ -278,24 +359,58 @@ public class SettingsActivity extends AppCompatActivity {
                     }
                 }
                 outFile.setReadable(true, false);
-                successCount++;
+                addedNames.add(name);
             } catch (IOException e) {
                 Log.e(TAG, "复制图片失败: " + uri, e);
             }
         }
 
-        if (successCount > 0) {
-            Toast.makeText(this, getString(R.string.toast_image_added, successCount), Toast.LENGTH_SHORT).show();
+        if (!addedNames.isEmpty()) {
+            // 默认让新增图片进入“展示”列表
+            String existing = mPrefs.getString(KEY_ACTIVE_IMAGES, "");
+            List<String> active = new ArrayList<>();
+            if (!TextUtils.isEmpty(existing)) {
+                for (String s : existing.split(",")) {
+                    s = s.trim();
+                    if (!s.isEmpty()) active.add(s);
+                }
+            }
+            for (String n : addedNames) {
+                if (!active.contains(n)) active.add(n);
+            }
+            mPrefs.edit().putString(KEY_ACTIVE_IMAGES, TextUtils.join(",", active)).apply();
+            Toast.makeText(this, getString(R.string.toast_image_added, addedNames.size()),
+                    Toast.LENGTH_SHORT).show();
             loadImageList();
         } else {
             Toast.makeText(this, R.string.toast_image_add_failed, Toast.LENGTH_SHORT).show();
         }
     }
 
+    private String stripExt(String fileName) {
+        if (fileName == null) return "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot > 0) fileName = fileName.substring(0, dot);
+        return fileName.trim();
+    }
+
+    private String uniquify(File dir, String base, String ext) {
+        // 过滤掉不合法文件名字符
+        String safe = base.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        if (safe.isEmpty()) safe = "image";
+        String candidate = safe + ext;
+        if (!new File(dir, candidate).exists()) return candidate;
+        for (int i = 1; i < 1000; i++) {
+            candidate = safe + " (" + i + ")" + ext;
+            if (!new File(dir, candidate).exists()) return candidate;
+        }
+        return safe + "_" + System.currentTimeMillis() + ext;
+    }
+
     private void loadImageList() {
         mImageListContainer.removeAllViews();
-        mImageRadioButtons.clear();
         mImageCheckBoxes.clear();
+        mImageThumbs.clear();
         mImageFileNames.clear();
 
         File adsDir = new File(Utils.getAdsDir());
@@ -326,30 +441,121 @@ public class SettingsActivity extends AppCompatActivity {
         boolean hasSaved = mPrefs.contains(KEY_ACTIVE_IMAGES);
 
         LayoutInflater inflater = LayoutInflater.from(this);
-        for (File file : imageFiles) {
+        for (final File file : imageFiles) {
             final String fileName = file.getName();
             mImageFileNames.add(fileName);
 
             @SuppressLint("InflateParams")
-            LinearLayout row = (LinearLayout) inflater.inflate(R.layout.item_image, mImageListContainer, false);
+            MaterialCardView card = (MaterialCardView) inflater.inflate(R.layout.item_image, mImageListContainer, false);
 
-            MaterialRadioButton radio = row.findViewById(R.id.imageRadio);
-            radio.setText(fileName);
-            radio.setOnClickListener(mRadioGroupListener);
-            mImageRadioButtons.add(radio);
+            TextView name = card.findViewById(R.id.imageName);
+            name.setText(fileName);
 
-            MaterialCheckBox check = row.findViewById(R.id.imageCheck);
+            ImageView thumb = card.findViewById(R.id.imageThumb);
+            mImageThumbs.add(thumb);
+            thumb.setTag(file.getAbsolutePath());
+            thumb.setImageDrawable(null);
+            Bitmap cached = mThumbCache.get(file.getAbsolutePath());
+            if (cached != null) {
+                thumb.setImageBitmap(cached);
+            } else {
+                loadThumbnailAsync(thumb, file);
+            }
+
+            MaterialCheckBox check = card.findViewById(R.id.imageCheck);
             check.setChecked(hasSaved ? activeList.contains(fileName) : true);
             mImageCheckBoxes.add(check);
 
-            MaterialCardView card = row.findViewById(R.id.imageCard);
+            View delete = card.findViewById(R.id.imageDelete);
+            delete.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    confirmDelete(file);
+                }
+            });
+
             card.setCardBackgroundColor(getResources().getColor(R.color.md_theme_surfaceVariant));
 
-            mImageListContainer.addView(row);
+            mImageListContainer.addView(card);
         }
+    }
 
-        if (!mImageRadioButtons.isEmpty()) {
-            mImageRadioButtons.get(0).setChecked(true);
+    private void loadThumbnailAsync(final ImageView target, final File file) {
+        final String path = file.getAbsolutePath();
+        mThumbExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                final Bitmap thumb = decodeThumb(file);
+                if (thumb != null) {
+                    mThumbCache.put(path, thumb);
+                    mMainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (path.equals(target.getTag())) {
+                                target.setImageBitmap(thumb);
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private Bitmap decodeThumb(File file) {
+        try {
+            android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+            opts.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
+            int halfW = Math.max(1, opts.outWidth / 2);
+            int halfH = Math.max(1, opts.outHeight / 2);
+            int sample = 1;
+            while ((halfW / sample) > THUMB_SIZE || (halfH / sample) > THUMB_SIZE) {
+                sample *= 2;
+            }
+            opts.inSampleSize = sample;
+            opts.inJustDecodeBounds = false;
+            opts.inPreferredConfig = Bitmap.Config.RGB_565;
+            return android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
+        } catch (Throwable t) {
+            Log.w(TAG, "缩略图解码失败: " + file.getAbsolutePath(), t);
+            return null;
+        }
+    }
+
+    private void confirmDelete(final File file) {
+        new AlertDialog.Builder(this)
+                .setMessage(getString(R.string.confirm_delete_image, file.getName()))
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.btn_delete, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        deleteImage(file);
+                    }
+                })
+                .show();
+    }
+
+    private void deleteImage(File file) {
+        String path = file.getAbsolutePath();
+        boolean deleted = false;
+        try {
+            deleted = file.delete();
+        } catch (Throwable t) {
+            Log.w(TAG, "删除失败: " + path, t);
+        }
+        if (deleted) {
+            mThumbCache.remove(path);
+            // 从 active_images 中移除，避免残留
+            String savedActive = mPrefs.getString(KEY_ACTIVE_IMAGES, "");
+            if (!TextUtils.isEmpty(savedActive)) {
+                List<String> list = new ArrayList<>(Arrays.asList(savedActive.split(",")));
+                list.remove(file.getName());
+                mPrefs.edit().putString(KEY_ACTIVE_IMAGES, TextUtils.join(",", list)).apply();
+            }
+            Toast.makeText(this, R.string.toast_image_deleted, Toast.LENGTH_SHORT).show();
+            loadImageList();
+        } else {
+            Toast.makeText(this, R.string.toast_image_add_failed, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -358,16 +564,6 @@ public class SettingsActivity extends AppCompatActivity {
         ((TextView) view.findViewById(R.id.emptyText)).setText(message);
         mImageListContainer.addView(view);
     }
-
-    private final View.OnClickListener mRadioGroupListener = new View.OnClickListener() {
-        @Override
-        public void onClick(View v) {
-            MaterialRadioButton clicked = (MaterialRadioButton) v;
-            for (MaterialRadioButton rb : mImageRadioButtons) {
-                rb.setChecked(rb == clicked);
-            }
-        }
-    };
 
     // =========================================================================
     // 保存与退出
@@ -392,14 +588,43 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
 
-        String imageList = sb.toString();
+        final String imageList = sb.toString();
         mPrefs.edit()
                 .putString(KEY_POWER_ON_TIME, powerOn)
                 .putString(KEY_POWER_OFF_TIME, powerOff)
                 .putString(KEY_ACTIVE_IMAGES, imageList)
                 .putString(KEY_IMAGE_ORDER, imageList)
+                .putInt(KEY_IMAGE_INTERVAL, mImageInterval)
                 .apply();
 
+        // 自动关机依赖设备管理器权限。未激活则引导用户开启后再完成退出
+        if (!isDeviceAdminActive()) {
+            requestDeviceAdmin();
+            return;
+        }
+
+        finishSave();
+    }
+
+    private boolean isDeviceAdminActive() {
+        if (mAdminComponent == null) return false;
+        DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        return dpm != null && dpm.isAdminActive(mAdminComponent);
+    }
+
+    private void requestDeviceAdmin() {
+        Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+        intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, mAdminComponent);
+        intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                getString(R.string.device_admin_explanation));
+        try {
+            startActivityForResult(intent, REQUEST_CODE_DEVICE_ADMIN);
+        } catch (Throwable t) {
+            Toast.makeText(this, R.string.toast_device_admin_unavailable, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void finishSave() {
         startService(new Intent(this, AutoPowerService.class));
         Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show();
         finish();
@@ -564,5 +789,13 @@ public class SettingsActivity extends AppCompatActivity {
     public static String getPowerOffTime(Context context) {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .getString(KEY_POWER_OFF_TIME, DEFAULT_POWER_OFF_TIME);
+    }
+
+    public static int getImageInterval(Context context) {
+        int v = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getInt(KEY_IMAGE_INTERVAL, DEFAULT_IMAGE_INTERVAL);
+        if (v < MIN_IMAGE_INTERVAL) v = MIN_IMAGE_INTERVAL;
+        if (v > MAX_IMAGE_INTERVAL) v = MAX_IMAGE_INTERVAL;
+        return v;
     }
 }

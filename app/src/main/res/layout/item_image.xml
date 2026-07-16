@@ -15,20 +15,56 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <com.google.android.material.radiobutton.MaterialRadioButton
-            android:id="@+id/imageRadio"
+        <!-- 缩略图 -->
+        <ImageView
+            android:id="@+id/imageThumb"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_marginEnd="12dp"
+            android:background="@color/md_theme_surfaceVariant"
+            android:contentDescription="@string/thumb_desc"
+            android:scaleType="centerCrop" />
+
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:textColor="@color/md_theme_onSurfaceVariant" />
+            android:orientation="vertical">
 
-        <com.google.android.material.checkbox.MaterialCheckBox
-            android:id="@+id/imageCheck"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/image_checkbox_show"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="@color/md_theme_onSurfaceVariant" />
+            <TextView
+                android:id="@+id/imageName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:textColor="@color/md_theme_onSurfaceVariant" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/imageCheck"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/image_checkbox_show"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="@color/md_theme_onSurfaceVariant" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/imageDelete"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/btn_delete"
+                    app:icon="@android:drawable/ic_menu_delete"
+                    app:iconTint="@color/md_theme_error" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

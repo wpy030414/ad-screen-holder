@@ -10,8 +10,8 @@ android {
         applicationId "im.xrl.ad_screen_holder"
         minSdkVersion 21
         targetSdkVersion 25
-        versionCode 2607160
-        versionName "26.7.16+0510"
+        versionCode 2607161
+        versionName "26.7.16+1710"
     }
 
     buildTypes {

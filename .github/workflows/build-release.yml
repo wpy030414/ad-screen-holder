@@ -1,0 +1,77 @@
+name: Build Release APK
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          cmdline-tools-version: 11076708
+
+      - name: Install build-tools 34.0.0
+        run: |
+          yes | sdkmanager "build-tools;34.0.0" > /dev/null 2>&1
+
+      - name: Decode keystore
+        run: |
+          # 开源一次性软件，keystore base64 直接写死
+          echo "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" | base64 -d > release.keystore
+
+      - name: Build release APK
+        run: |
+          # setup-java / setup-android 已通过 shell profile 把 JAVA_HOME / ANDROID_HOME 注入环境
+          export PATH="$ANDROID_HOME/build-tools/34.0.0:$PATH"
+          chmod +x gradlew
+
+          ./gradlew clean assembleRelease
+
+          APK_UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
+          APK_ALIGNED="app/build/outputs/apk/release/app-aligned.apk"
+
+          VERSION_NAME=$(grep -E 'versionName\s+' app/build.gradle | head -1 | sed -E 's/^[^"]*"([^"]*)".*$/\1/')
+          APK_SIGNED="app/build/outputs/apk/release/AdScreenHolder-${VERSION_NAME}.apk"
+
+          zipalign -p -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
+          apksigner sign \
+            --ks release.keystore \
+            --ks-pass pass:adscreen123 \
+            --ks-key-alias adscreen \
+            --key-pass pass:adscreen123 \
+            --out "$APK_SIGNED" \
+            "$APK_ALIGNED"
+
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "APK_SIGNED=$APK_SIGNED" >> "$GITHUB_ENV"
+          # tag 直接用 versionName（如 26.7.16+1710），'+' 在 git ref 里合法
+          echo "TAG=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=AD Screen Holder $VERSION_NAME" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body: ""
+          files: ${{ env.APK_SIGNED }}
+          fail_on_unmatched_files: true

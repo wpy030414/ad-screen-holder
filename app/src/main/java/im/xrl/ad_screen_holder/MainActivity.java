@@ -41,7 +41,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "AdScreenHolder";
     private static final String ADS_DIR = Utils.getAdsDir();
-    private static final int IMAGE_INTERVAL_SECONDS = 10;
 
     private ImageView mImageView;
     private View mFallbackView;
@@ -60,7 +59,8 @@ public class MainActivity extends AppCompatActivity {
         public void run() {
             showNextImage();
             if (mHandler != null) {
-                mHandler.postDelayed(this, IMAGE_INTERVAL_SECONDS * 1000L);
+                int interval = SettingsActivity.getImageInterval(MainActivity.this);
+                mHandler.postDelayed(this, interval * 1000L);
             }
         }
     }
@@ -376,7 +376,8 @@ public class MainActivity extends AppCompatActivity {
         mIsRunning = true;
         hideFallback();
         showNextImage();
-        mHandler.postDelayed(mSwitcher, IMAGE_INTERVAL_SECONDS * 1000L);
+        int interval = SettingsActivity.getImageInterval(this);
+        mHandler.postDelayed(mSwitcher, interval * 1000L);
         Log.d(TAG, "轮播开始");
     }
 
